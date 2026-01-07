@@ -6,13 +6,6 @@ workflows:
     environment:
       java: 11
       node: 18
-      ndk: r21e
-    triggering:
-      events:
-        - push
-      branch:
-        include:
-          - main
     scripts:
       - name: Install dependencies
         script: |
@@ -30,10 +23,3 @@ workflows:
           ./gradlew clean assembleDebug
     artifacts:
       - android/app/build/outputs/apk/debug/app-debug.apk
-    publishing:
-      email:
-        recipients:
-          - $CODEMAGIC_BUILD_EMAIL
-        notify:
-          success: true
-          failure: true
