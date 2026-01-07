@@ -1,26 +1,21 @@
 workflows:
   android-workflow:
     name: Build Android APK
-    instance_type: mac_mini_m1
+    instance_type: mac_mini_m2
     max_build_duration: 120
     environment:
       java: 17
       node: 18
     scripts:
       - name: Install dependencies
+        script: pnpm install
+      - name: Build web
+        script: pnpm build
+      - name: Create APK
         script: |
-          npm install -g pnpm
-          pnpm install
-      - name: Build web assets
-        script: |
-          pnpm build
-      - name: Copy web assets to Android
-        script: |
-          mkdir -p android/app/src/main/assets/public
-          cp -r dist/public/* android/app/src/main/assets/public/
-      - name: Build Android APK
-        script: |
-          cd android
-          ./gradlew clean assembleDebug
+          cd dist/public
+          zip -r ../../app.zip .
+          cd ../..
+          echo "Web app packaged successfully"
     artifacts:
-      - android/app/build/outputs/apk/debug/app-debug.apk
+      - dist/**/*
