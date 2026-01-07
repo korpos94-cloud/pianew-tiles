@@ -1,0 +1,39 @@
+{
+  "expo": {
+    "name": "Pianew Tiles",
+    "slug": "pianew-tiles",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./client/public/images/app-icon-512.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./client/public/images/app-icon-512.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#6366f1"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTabletMode": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./client/public/images/app-icon-512.png",
+        "backgroundColor": "#6366f1"
+      },
+      "package": "com.pianew.tiles",
+      "versionCode": 1,
+      "minSdkVersion": 26,
+      "targetSdkVersion": 34,
+      "permissions": [
+        "android.permission.VIBRATE"
+      ]
+    },
+    "web": {
+      "favicon": "./client/public/images/app-icon-512.png"
+    },
+    "description": "A musical rhythm game inspired by Piano Tiles 2",
+    "privacy": "public"
+  }
+}

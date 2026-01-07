@@ -1,0 +1,11 @@
+workflows:
+  default:
+    name: Pianew Tiles Build
+    instance_type: mac_mini
+    environment:
+      node: 18
+    scripts:
+      - npm install -g eas-cli
+      - eas build --platform android --local
+    artifacts:
+      - dist/**/*.apk
