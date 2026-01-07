@@ -1,11 +1,39 @@
 workflows:
-  default:
-    name: Pianew Tiles Build
-    instance_type: mac_mini
+  android-workflow:
+    name: Build Android APK
+    instance_type: linux
+    max_build_duration: 120
     environment:
+      java: 11
       node: 18
+      ndk: r21e
+    triggering:
+      events:
+        - push
+      branch:
+        include:
+          - main
     scripts:
-      - npm install -g eas-cli
-      - eas build --platform android --local
+      - name: Install dependencies
+        script: |
+          npm install -g pnpm
+          pnpm install
+      - name: Build web assets
+        script: |
+          pnpm build
+      - name: Sync with Capacitor
+        script: |
+          pnpm exec cap sync
+      - name: Build Android APK
+        script: |
+          cd android
+          ./gradlew clean assembleDebug
     artifacts:
-      - dist/**/*.apk
+      - android/app/build/outputs/apk/debug/app-debug.apk
+    publishing:
+      email:
+        recipients:
+          - $CODEMAGIC_BUILD_EMAIL
+        notify:
+          success: true
+          failure: true
