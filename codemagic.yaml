@@ -14,9 +14,10 @@ workflows:
       - name: Build web assets
         script: |
           pnpm build
-      - name: Sync with Capacitor
+      - name: Copy web assets to Android
         script: |
-          pnpm exec cap sync
+          mkdir -p android/app/src/main/assets/public
+          cp -r dist/public/* android/app/src/main/assets/public/
       - name: Build Android APK
         script: |
           cd android
