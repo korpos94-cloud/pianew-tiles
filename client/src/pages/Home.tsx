@@ -1,24 +1,20 @@
 import { Button } from "@/components/ui/button";
-import { Loader2 } from "lucide-react";
-import { Streamdown } from 'streamdown';
+import { useLocation } from "wouter";
 
-/**
- * All content in this page are only for example, replace with your own feature implementation
- * When building pages, remember your instructions in Frontend Best Practices, Design Guide and Common Pitfalls
- */
 export default function Home() {
-  // If theme is switchable in App.tsx, we can implement theme toggling like this:
-  // const { theme, toggleTheme } = useTheme();
+  const [, setLocation] = useLocation();
 
   return (
-    <div className="min-h-screen flex flex-col">
-      <main>
-        {/* Example: lucide-react for icons */}
-        <Loader2 className="animate-spin" />
-        Example Page
-        {/* Example: Streamdown for markdown rendering */}
-        <Streamdown>Any **markdown** content</Streamdown>
-        <Button variant="default">Example Button</Button>
+    <div className="min-h-screen bg-gradient-to-br from-purple-600 to-blue-600 flex flex-col items-center justify-center p-4">
+      <main className="text-center">
+        <h1 className="text-5xl font-bold text-white mb-4">Pianew Tiles</h1>
+        <p className="text-xl text-white/90 mb-8">A musical rhythm game inspired by Piano Tiles 2</p>
+        <Button
+          onClick={() => setLocation('/game')}
+          className="bg-white text-purple-600 hover:bg-gray-100 px-8 py-3 text-lg font-bold"
+        >
+          Play Now
+        </Button>
       </main>
     </div>
   );
