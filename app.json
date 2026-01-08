@@ -4,23 +4,24 @@
     "slug": "pianew-tiles",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./client/public/images/app-icon-512.png",
-    "userInterfaceStyle": "light",
+    "icon": "./assets/images/icon.png",
+    "userInterfaceStyle": "dark",
     "splash": {
-      "image": "./client/public/images/app-icon-512.png",
+      "image": "./assets/images/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#6366f1"
+      "backgroundColor": "#0F172A"
     },
     "assetBundlePatterns": [
       "**/*"
     ],
     "ios": {
-      "supportsTabletMode": true
+      "supportsTabletMode": true,
+      "bundleIdentifier": "com.pianew.tiles"
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./client/public/images/app-icon-512.png",
-        "backgroundColor": "#6366f1"
+        "foregroundImage": "./assets/images/adaptive-icon.png",
+        "backgroundColor": "#0F172A"
       },
       "package": "com.pianew.tiles",
       "versionCode": 1,
@@ -31,7 +32,7 @@
       ]
     },
     "web": {
-      "favicon": "./client/public/images/app-icon-512.png"
+      "favicon": "./assets/images/favicon.png"
     },
     "description": "A musical rhythm game inspired by Piano Tiles 2",
     "privacy": "public"
