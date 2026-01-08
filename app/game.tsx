@@ -23,16 +23,17 @@ const TILE_WIDTH = SCREEN_WIDTH / COLUMNS;
 const TILE_HEIGHT = 160;
 const SPAWN_INTERVAL = 700;
 const TARGET_LINE_Y = SCREEN_HEIGHT * 0.8;
-const INITIAL_FALL_SPEED = 0.3; // pixels per ms
-const MAX_FALL_SPEED = 0.6;
+const INITIAL_FALL_SPEED = 3.5; // seconds to reach bottom
+const MAX_FALL_SPEED = 1.5;
 const HIT_THRESHOLD = 80; // pixels
+const PERFECT_THRESHOLD = 30; // pixels
 
 interface Tile {
   id: number;
   column: number;
   y: number;
   hit: boolean;
-  missed?: boolean;
+  spawnTime: number;
 }
 
 interface Particle {
@@ -48,10 +49,10 @@ interface Particle {
 type HitQuality = 'PERFECT' | 'GREAT' | 'GOOD' | 'MISS' | null;
 
 const MELODY_NOTES = [
-  'C4', 'E4', 'G4', 'C5', 'G4', 'E4', 'C4',
-  'F4', 'A4', 'C5', 'F5', 'C5', 'A4', 'F4',
-  'G4', 'B4', 'D5', 'G5', 'D5', 'B4', 'G4',
-  'C4', 'E4', 'G4', 'C5', 'B4', 'A4', 'G4',
+  'C4', 'C4', 'G4', 'G4', 'A4', 'A4', 'G4',
+  'F4', 'F4', 'E4', 'E4', 'D4', 'D4', 'C4',
+  'G4', 'G4', 'F4', 'F4', 'E4', 'E4', 'D4',
+  'G4', 'G4', 'F4', 'F4', 'E4', 'E4', 'D4',
 ];
 
 export default function GameScreen() {
@@ -64,16 +65,18 @@ export default function GameScreen() {
     isPaused: false,
     perfectHits: 0,
     totalTouches: 0,
-    lastHitQuality: null as HitQuality,
+    combo: 0,
   });
   const [tiles, setTiles] = useState<Tile[]>([]);
   const [particles, setParticles] = useState<Particle[]>([]);
+  const [hitFeedback, setHitFeedback] = useState<{ id: number; text: string; x: number; y: number } | null>(null);
+
   const gameLoopRef = useRef<number | null>(null);
   const lastTimeRef = useRef<number>(0);
   const lastSpawnRef = useRef<number>(0);
   const tileIdRef = useRef<number>(0);
   const particleIdRef = useRef<number>(0);
-  const fallSpeedRef = useRef(INITIAL_FALL_SPEED);
+  const fallSpeedSecondsRef = useRef(INITIAL_FALL_SPEED);
   const synth = useRef<Tone.Sampler | null>(null);
   const melodyIndexRef = useRef(0);
   const gameActive = useRef(true);
@@ -82,48 +85,19 @@ export default function GameScreen() {
   useEffect(() => {
     const setupAudio = async () => {
       await Tone.start();
-      
-      // Using a Sampler for better piano sound
+      // Using a better piano-like sound with a sampler or richer synth
       synth.current = new Tone.Sampler({
         urls: {
-          A0: "A0.mp3",
-          C1: "C1.mp3",
-          "D#1": "Ds1.mp3",
-          "F#1": "Fs1.mp3",
           A1: "A1.mp3",
-          C2: "C2.mp3",
-          "D#2": "Ds2.mp3",
-          "F#2": "Fs2.mp3",
           A2: "A2.mp3",
-          C3: "C3.mp3",
-          "D#3": "Ds3.mp3",
-          "F#3": "Fs3.mp3",
-          A3: "A3.mp3",
-          C4: "C4.mp3",
-          "D#4": "Ds4.mp3",
-          "F#4": "Fs4.mp3",
-          A4: "A4.mp3",
-          C5: "C5.mp3",
-          "D#5": "Ds5.mp3",
-          "F#5": "Fs5.mp3",
-          A5: "A5.mp3",
-          C6: "C6.mp3",
-          "D#6": "Ds6.mp3",
-          "F#6": "Fs6.mp3",
-          A6: "A6.mp3",
-          C7: "C7.mp3",
-          "D#7": "Ds7.mp3",
-          "F#7": "Fs7.mp3",
-          A7: "A7.mp3",
-          C8: "C8.mp3"
         },
-        release: 1,
-        baseUrl: "https://tonejs.github.io/audio/salamander/"
+        baseUrl: "https://tonejs.github.io/audio/salamander/",
+        onload: () => {
+          if (synth.current) {
+            synth.current.volume.value = -5 + (stats.musicVolume / 100) * 10;
+          }
+        }
       }).toDestination();
-      
-      if (synth.current) {
-        synth.current.volume.value = -10 + (stats.musicVolume / 100) * 10;
-      }
     };
 
     setupAudio();
@@ -133,10 +107,10 @@ export default function GameScreen() {
     };
   }, []);
 
-  // Handle Game Over
+  // Persist Score on Game Over
   useEffect(() => {
     if (gameState.gameOver) {
-      const stars = gameState.score >= 500 ? 3 : gameState.score >= 250 ? 2 : gameState.score >= 100 ? 1 : 0;
+      const stars = gameState.score >= 200 ? 3 : gameState.score >= 100 ? 2 : gameState.score >= 50 ? 1 : 0;
       updateBestScore(gameState.score, stars);
     }
   }, [gameState.gameOver]);
@@ -145,39 +119,48 @@ export default function GameScreen() {
   useEffect(() => {
     const gameLoop = (time: number) => {
       if (gameState.gameOver || gameState.isPaused || !gameActive.current) {
-        lastTimeRef.current = time;
+        lastTimeRef.current = 0;
         return;
       }
 
-      if (!lastTimeRef.current) lastTimeRef.current = time;
-      const deltaTime = time - lastTimeRef.current;
+      if (lastTimeRef.current === 0) {
+        lastTimeRef.current = time;
+        gameLoopRef.current = requestAnimationFrame(gameLoop);
+        return;
+      }
+
+      const deltaTime = (time - lastTimeRef.current) / 1000;
       lastTimeRef.current = time;
-      
-      // Spawn new tiles
-      if (time - lastSpawnRef.current >= SPAWN_INTERVAL) {
+
+      // Spawn logic
+      const spawnInterval = (fallSpeedSecondsRef.current * 1000) / 4; // Spawn a tile every 1/4 of the fall time
+      if (time - lastSpawnRef.current >= spawnInterval) {
         const column = Math.floor(Math.random() * COLUMNS);
         const newTile: Tile = {
           id: tileIdRef.current++,
           column,
           y: -TILE_HEIGHT,
           hit: false,
+          spawnTime: time,
         };
         setTiles(prev => [...prev, newTile]);
         lastSpawnRef.current = time;
       }
 
       // Update positions
+      const pixelsPerSecond = SCREEN_HEIGHT / fallSpeedSecondsRef.current;
       setTiles(prev => {
         const updated = prev.map(tile => ({
           ...tile,
-          y: tile.y + fallSpeedRef.current * deltaTime
+          y: tile.y + pixelsPerSecond * deltaTime
         }));
 
-        // Check for missed tiles
+        // Check for missed tiles (not hit and passed the target line)
         const missedTile = updated.find(t => !t.hit && t.y > TARGET_LINE_Y + TILE_HEIGHT / 2);
         if (missedTile) {
-          setGameState(prev => ({ ...prev, gameOver: true }));
+          setGameState(prev => ({ ...prev, combo: 0, gameOver: true }));
           gameActive.current = false;
+          if (stats.vibration) Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         }
 
         return updated.filter(t => t.y < SCREEN_HEIGHT + TILE_HEIGHT);
@@ -185,19 +168,23 @@ export default function GameScreen() {
 
       // Update particles
       setParticles(prev => {
+        if (prev.length === 0) return prev;
         return prev
           .map(p => ({
             ...p,
             x: p.x + p.vx,
             y: p.y + p.vy,
-            vy: p.vy + 0.15, // reduced gravity for softer fall
-            life: p.life - 0.015,
+            vy: p.vy + 0.3,
+            life: p.life - 0.03,
           }))
           .filter(p => p.life > 0);
       });
 
       // Increase speed gradually
-      fallSpeedRef.current = Math.min(MAX_FALL_SPEED, INITIAL_FALL_SPEED + (gameState.score / 5000));
+      fallSpeedSecondsRef.current = Math.max(
+        MAX_FALL_SPEED,
+        INITIAL_FALL_SPEED - (gameState.score / 500) * (INITIAL_FALL_SPEED - MAX_FALL_SPEED)
+      );
 
       gameLoopRef.current = requestAnimationFrame(gameLoop);
     };
@@ -211,70 +198,51 @@ export default function GameScreen() {
     };
   }, [gameState.gameOver, gameState.isPaused, stats.musicVolume, gameState.score]);
 
-  const onBackgroundPress = () => {
-    if (!gameState.gameOver && !gameState.isPaused && gameActive.current) {
-      if (stats.vibration) Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      setGameState(prev => ({ ...prev, gameOver: true }));
-      gameActive.current = false;
-    }
-  };
-
   const onTilePress = (tile: Tile) => {
     if (tile.hit || gameState.gameOver || gameState.isPaused) return;
 
-    // The tile should be centered around its Y position
-    const tileCenterY = tile.y + TILE_HEIGHT / 2;
-    const distance = Math.abs(tileCenterY - TARGET_LINE_Y);
+    const distance = Math.abs(tile.y - TARGET_LINE_Y);
     
     if (distance < HIT_THRESHOLD) {
       // Play note
       const note = MELODY_NOTES[melodyIndexRef.current % MELODY_NOTES.length];
-      synth.current?.triggerAttackRelease(note, '4n');
+      synth.current?.triggerAttackRelease(note, '8n');
       melodyIndexRef.current++;
 
-      let quality: HitQuality = 'GOOD';
-      let points = 10;
-      let particleColor = colors.primaryLight;
-
-      if (distance < 25) {
-        quality = 'PERFECT';
-        points = 30;
-        particleColor = '#FFD700'; // Gold
-      } else if (distance < 50) {
-        quality = 'GREAT';
-        points = 20;
-        particleColor = colors.accentLight;
-      }
+      const isPerfect = distance < PERFECT_THRESHOLD;
+      
+      // Hit Feedback
+      setHitFeedback({
+        id: Date.now(),
+        text: isPerfect ? 'PERFECT' : 'GOOD',
+        x: (tile.column + 0.5) * TILE_WIDTH - 40,
+        y: TARGET_LINE_Y - 40,
+      });
 
       // Update score
       setGameState(prev => ({
         ...prev,
-        score: prev.score + points,
-        perfectHits: prev.perfectHits + (quality === 'PERFECT' ? 1 : 0),
+        score: prev.score + (isPerfect ? 20 : 10),
+        perfectHits: prev.perfectHits + (isPerfect ? 1 : 0),
         totalTouches: prev.totalTouches + 1,
-        lastHitQuality: quality,
+        combo: prev.combo + 1,
       }));
-
-      // Reset quality text after a delay
-      setTimeout(() => {
-        setGameState(prev => ({ ...prev, lastHitQuality: null }));
-      }, 500);
 
       // Create particles
       if (stats.visualEffects) {
         const newParticles: Particle[] = [];
-        const particleCount = quality === 'PERFECT' ? 12 : quality === 'GREAT' ? 8 : 4;
-        for (let i = 0; i < particleCount; i++) {
-          const angle = (i / particleCount) * Math.PI * 2;
-          const speed = Math.random() * 4 + 2;
+        const count = isPerfect ? 12 : 6;
+        for (let i = 0; i < count; i++) {
+          const angle = (i / count) * Math.PI * 2;
+          const force = isPerfect ? 6 : 4;
           newParticles.push({
             id: particleIdRef.current++,
             x: (tile.column + 0.5) * TILE_WIDTH,
             y: TARGET_LINE_Y,
-            vx: Math.cos(angle) * speed,
-            vy: Math.sin(angle) * speed,
+            vx: Math.cos(angle) * force,
+            vy: Math.sin(angle) * force,
             life: 1,
-            color: particleColor,
+            color: isPerfect ? '#FFD700' : colors.primaryLight,
           });
         }
         setParticles(prev => [...prev, ...newParticles]);
@@ -282,20 +250,24 @@ export default function GameScreen() {
 
       // Haptics
       if (stats.vibration) {
-        Haptics.impactAsync(
-          quality === 'PERFECT' ? Haptics.ImpactFeedbackStyle.Heavy :
-          quality === 'GREAT' ? Haptics.ImpactFeedbackStyle.Medium :
-          Haptics.ImpactFeedbackStyle.Light
-        );
+        Haptics.impactAsync(isPerfect ? Haptics.ImpactFeedbackStyle.Heavy : Haptics.ImpactFeedbackStyle.Light);
       }
 
       // Mark tile as hit
       setTiles(prev => prev.map(t => t.id === tile.id ? { ...t, hit: true } : t));
     } else {
-      // Tapped but missed the window
-      if (stats.vibration) Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      setGameState(prev => ({ ...prev, gameOver: true }));
+      // Tapped too early/late but it was a tile press
+      setGameState(prev => ({ ...prev, combo: 0, gameOver: true }));
       gameActive.current = false;
+      if (stats.vibration) Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    }
+  };
+
+  const onBackgroundPress = () => {
+    if (!gameState.gameOver && !gameState.isPaused && gameActive.current) {
+      setGameState(prev => ({ ...prev, combo: 0, gameOver: true }));
+      gameActive.current = false;
+      if (stats.vibration) Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     }
   };
 
@@ -306,16 +278,17 @@ export default function GameScreen() {
       isPaused: false,
       perfectHits: 0,
       totalTouches: 0,
-      lastHitQuality: null,
+      combo: 0,
     });
     setTiles([]);
     setParticles([]);
+    setHitFeedback(null);
     tileIdRef.current = 0;
     particleIdRef.current = 0;
     melodyIndexRef.current = 0;
     lastSpawnRef.current = 0;
     lastTimeRef.current = 0;
-    fallSpeedRef.current = INITIAL_FALL_SPEED;
+    fallSpeedSecondsRef.current = INITIAL_FALL_SPEED;
     gameActive.current = true;
   };
 
@@ -326,8 +299,7 @@ export default function GameScreen() {
       <Stack.Screen options={{ headerShown: false }} />
       
       {/* Background Lanes */}
-      <TouchableOpacity 
-        activeOpacity={1} 
+      <Pressable 
         onPress={onBackgroundPress} 
         style={styles.gameArea}
       >
@@ -338,26 +310,37 @@ export default function GameScreen() {
         </View>
 
         {/* Target Line */}
-        <View style={[styles.targetLine, { top: TARGET_LINE_Y }]} />
+        <View style={[styles.targetLine, { top: TARGET_LINE_Y }]}>
+          <LinearGradient
+            colors={[colors.transparent, colors.primary, colors.transparent]}
+            start={{ x: 0, y: 0.5 }}
+            end={{ x: 1, y: 0.5 }}
+            style={StyleSheet.absoluteFill}
+          />
+        </View>
 
         {/* Tiles */}
         {tiles.map(tile => (
-          <TouchableOpacity
+          <Pressable
             key={tile.id}
-            activeOpacity={0.8}
             onPress={() => onTilePress(tile)}
             style={[
               styles.tile,
               {
                 left: tile.column * TILE_WIDTH,
                 top: tile.y,
-                backgroundColor: tile.hit ? colors.transparent : colors.primary,
                 opacity: tile.hit ? 0 : 1,
               }
             ]}
           >
-            <View style={styles.tileContent} />
-          </TouchableOpacity>
+            <View style={styles.tileContent}>
+              <LinearGradient
+                colors={[colors.primary, colors.primaryDark]}
+                style={StyleSheet.absoluteFill}
+                borderRadius={borderRadius.sm}
+              />
+            </View>
+          </Pressable>
         ))}
 
         {/* Particles */}
@@ -376,7 +359,17 @@ export default function GameScreen() {
             ]}
           />
         ))}
-      </TouchableOpacity>
+
+        {/* Hit Feedback Text */}
+        {hitFeedback && (
+          <AnimatedHitText 
+            key={hitFeedback.id} 
+            text={hitFeedback.text} 
+            x={hitFeedback.x} 
+            y={hitFeedback.y} 
+          />
+        )}
+      </Pressable>
 
       {/* Top UI */}
       <View style={styles.topUi}>
@@ -385,18 +378,11 @@ export default function GameScreen() {
           <Text style={styles.bestScoreLabel}>Best: {stats.bestScore}</Text>
         </View>
         
-        {/* Quality Indicator */}
-        {gameState.lastHitQuality && (
-          <Animated.View style={styles.qualityContainer}>
-            <Text style={[
-              styles.qualityText,
-              { color: gameState.lastHitQuality === 'PERFECT' ? '#FFD700' : 
-                       gameState.lastHitQuality === 'GREAT' ? colors.accentLight : 
-                       colors.primaryLight }
-            ]}>
-              {gameState.lastHitQuality}
-            </Text>
-          </Animated.View>
+        {/* Combo Indicator */}
+        {gameState.combo > 1 && (
+          <View style={styles.comboContainer}>
+            <Text style={styles.comboText}>{gameState.combo}x</Text>
+          </View>
         )}
 
         <Pressable onPress={() => setGameState(prev => ({ ...prev, isPaused: !prev.isPaused }))} style={styles.pauseButton}>
@@ -428,7 +414,7 @@ export default function GameScreen() {
                     key={i} 
                     name="star" 
                     size={40} 
-                    color={i < (gameState.score >= 500 ? 3 : gameState.score >= 250 ? 2 : gameState.score >= 100 ? 1 : 0) ? colors.warning : colors.border} 
+                    color={i < (gameState.score >= 200 ? 3 : gameState.score >= 100 ? 2 : gameState.score >= 50 ? 1 : 0) ? colors.warning : colors.border} 
                   />
                 ))}
               </View>
@@ -470,6 +456,32 @@ export default function GameScreen() {
   );
 }
 
+function AnimatedHitText({ text, x, y }: { text: string; x: number; y: number }) {
+  const opacity = useSharedValue(1);
+  const translateY = useSharedValue(0);
+
+  useEffect(() => {
+    opacity.value = withTiming(0, { duration: 500 });
+    translateY.value = withTiming(-50, { duration: 500 });
+  }, []);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    opacity: opacity.value,
+    transform: [{ translateY: translateY.value }],
+  }));
+
+  return (
+    <Animated.View style={[styles.hitFeedback, { left: x, top: y }, animatedStyle]}>
+      <Text style={[
+        styles.hitFeedbackText,
+        { color: text === 'PERFECT' ? '#FFD700' : colors.primaryLight }
+      ]}>
+        {text}
+      </Text>
+    </Animated.View>
+  );
+}
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -506,8 +518,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     height: 4,
-    backgroundColor: colors.primary,
-    opacity: 0.5,
+    opacity: 0.8,
   },
   tile: {
     position: 'absolute',
@@ -518,8 +529,7 @@ const styles = StyleSheet.create({
   tileContent: {
     flex: 1,
     borderRadius: borderRadius.sm,
-    backgroundColor: colors.primary,
-    ...shadows.sm,
+    ...shadows.md,
   },
   particle: {
     position: 'absolute',
@@ -549,6 +559,22 @@ const styles = StyleSheet.create({
   bestScoreLabel: {
     ...typography.smallBold,
     color: colors.textTertiary,
+  },
+  comboContainer: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 100,
+    alignItems: 'center',
+    zIndex: 1,
+  },
+  comboText: {
+    ...typography.h2,
+    fontWeight: 'bold',
+    color: colors.warning,
+    textShadowColor: 'rgba(0,0,0,0.5)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 4,
   },
   pauseButton: {
     width: 44,
@@ -610,5 +636,18 @@ const styles = StyleSheet.create({
   },
   modalButton: {
     width: '100%',
+  },
+  hitFeedback: {
+    position: 'absolute',
+    width: 80,
+    alignItems: 'center',
+    zIndex: 50,
+  },
+  hitFeedbackText: {
+    ...typography.h3,
+    fontWeight: '900',
+    textShadowColor: 'rgba(0,0,0,0.5)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 4,
   },
 });

@@ -5,12 +5,30 @@ import { colors, spacing, typography, shadows, borderRadius } from '@/constants/
 import { useGameStore } from '@/hooks/useGameStore';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import Animated, { FadeInDown, FadeInUp, useSharedValue, useAnimatedStyle, withSpring, withRepeat, withSequence } from 'react-native-reanimated';
 
 export default function Home() {
   const router = useRouter();
   const { stats, user, login, logout, isLoading, updateSettings } = useGameStore();
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+
+  const iconScale = useSharedValue(1);
+
+  useEffect(() => {
+    iconScale.value = withRepeat(
+      withSequence(
+        withSpring(1.1, { damping: 2, stiffness: 80 }),
+        withSpring(1, { damping: 2, stiffness: 80 })
+      ),
+      -1,
+      true
+    );
+  }, []);
+
+  const animatedIconStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: iconScale.value }],
+  }));
 
   return (
     <View style={styles.container}>
@@ -20,20 +38,23 @@ export default function Home() {
       />
       
       <Container safeArea padding="lg" style={styles.content}>
-        <View style={styles.header}>
+        <Animated.View entering={FadeInDown.duration(600).delay(200)} style={styles.header}>
           <Text style={styles.title}>Pianew Tiles</Text>
           <Text style={styles.subtitle}>Tap to the rhythm of the melody</Text>
-        </View>
+        </Animated.View>
 
-        <View style={styles.heroContainer}>
+        <Animated.View 
+          entering={FadeInUp.duration(800).delay(400)} 
+          style={[styles.heroContainer, animatedIconStyle]}
+        >
           <Image
             source={require('@/assets/images/icon.png')}
             style={styles.icon}
             resizeMode="contain"
           />
-        </View>
+        </Animated.View>
 
-        <View style={styles.statsContainer}>
+        <Animated.View entering={FadeInDown.duration(600).delay(600)} style={styles.statsContainer}>
           <Card variant="elevated" style={styles.statsCard}>
             <Card.Content>
               <View style={styles.statsRow}>
@@ -49,9 +70,9 @@ export default function Home() {
               </View>
             </Card.Content>
           </Card>
-        </View>
+        </Animated.View>
 
-        <View style={styles.actions}>
+        <Animated.View entering={FadeInDown.duration(600).delay(800)} style={styles.actions}>
           <Button
             variant="primary"
             size="lg"
@@ -84,17 +105,19 @@ export default function Home() {
                 Sign in
               </Button>
             ) : (
-              <Button
-                variant="ghost"
-                size="sm"
-                onPress={logout}
-                style={styles.authButton}
-              >
-                Sign Out ({user.displayName || user.email})
-              </Button>
+              <View style={styles.flex1}>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onPress={logout}
+                  style={styles.authButton}
+                >
+                  Sign Out ({user.displayName || user.email})
+                </Button>
+              </View>
             )}
           </View>
-        </View>
+        </Animated.View>
 
         <Modal visible={isSettingsOpen} transparent animationType="slide">
           <View style={styles.modalOverlay}>
